@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ECG Caliper Tool with Independent Calipers</title>
+    <style>
+      #canvas {
+        border: 1px solid black;
+        touch-action: none; /* Disable default touch actions for custom panning */
+        cursor: crosshair;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas" width="800" height="400"></canvas>
+
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+
+      // ECG Image
+      const ecgImage = new Image();
+      ecgImage.src = "./ecg.webp"; // Replace with your ECG image path
+
+      // Caliper positions (stored independently of image coordinates)
+      const caliper = {
+        leftLineX: 200,
+        rightLineX: 300,
+        horzLineY: 200,
+        lineWidth: 2,
+        lineColor: "red",
+        selectedLine: null,
+      };
+
+      // Zoom and pan variables for the image
+      let scale = 1;
+      let panX = 0;
+      let panY = 0;
+      let startPanX = 0;
+      let startPanY = 0;
+      let isPanning = false;
+
+      // Draw the ECG image and the caliper lines separately
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Apply zoom and pan transformations only for the image
+        ctx.save();
+        ctx.translate(panX, panY);
+        ctx.scale(scale, scale);
+
+        // Draw ECG image
+        ctx.drawImage(ecgImage, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        // Draw calipers independently of image transformations
+        drawCaliperLine(caliper.leftLineX, 0, caliper.leftLineX, canvas.height); // Left vertical line
+        drawCaliperLine(
+          caliper.rightLineX,
+          0,
+          caliper.rightLineX,
+          canvas.height
+        ); // Right vertical line
+        drawCaliperLine(
+          caliper.leftLineX,
+          caliper.horzLineY,
+          caliper.rightLineX,
+          caliper.horzLineY
+        ); // Horizontal line
+      }
+
+      function drawCaliperLine(x1, y1, x2, y2) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.lineWidth = caliper.lineWidth; // Fixed line width for caliper
+        ctx.strokeStyle = caliper.lineColor;
+        ctx.stroke();
+      }
+
+      // Detect if pointer is near a caliper line (for dragging)
+      function getLineUnderPointer(x, y) {
+        const tolerance = 5;
+
+        if (Math.abs(x - caliper.leftLineX) < tolerance) return "leftLine";
+        if (Math.abs(x - caliper.rightLineX) < tolerance) return "rightLine";
+        if (
+          Math.abs(y - caliper.horzLineY) < tolerance &&
+          x > caliper.leftLineX &&
+          x < caliper.rightLineX
+        )
+          return "horzLine";
+
+        return null;
+      }
+
+      // Pointer event listeners for caliper dragging and panning
+      canvas.addEventListener("pointerdown", (e) => {
+        const x = e.clientX - canvas.getBoundingClientRect().left;
+        const y = e.clientY - canvas.getBoundingClientRect().top;
+
+        // Check if we're clicking on a caliper line
+        caliper.selectedLine = getLineUnderPointer(x, y);
+
+        // Start panning only if no caliper line is selected
+        if (scale > 1 && !caliper.selectedLine) {
+          startPanX = e.clientX - panX;
+          startPanY = e.clientY - panY;
+          isPanning = true;
+        }
+      });
+
+      canvas.addEventListener("pointermove", (e) => {
+        const x = e.clientX - canvas.getBoundingClientRect().left;
+        const y = e.clientY - canvas.getBoundingClientRect().top;
+
+        // Dragging caliper lines if one is selected
+        if (caliper.selectedLine) {
+          if (caliper.selectedLine === "leftLine") caliper.leftLineX = x;
+          else if (caliper.selectedLine === "rightLine") caliper.rightLineX = x;
+          else if (caliper.selectedLine === "horzLine") caliper.horzLineY = y;
+
+          draw();
+        }
+        // Panning the canvas if no caliper line is selected and panning is active
+        else if (isPanning) {
+          panX = e.clientX - startPanX;
+          panY = e.clientY - startPanY;
+          draw();
+        }
+      });
+
+      canvas.addEventListener("pointerup", () => {
+        caliper.selectedLine = null;
+        isPanning = false;
+      });
+
+      // Zoom in and out with wheel event
+      canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const scaleAmount = 1.1;
+        const mouseX = e.clientX - canvas.getBoundingClientRect().left;
+        const mouseY = e.clientY - canvas.getBoundingClientRect().top;
+
+        // Zoom in or out based on wheel direction
+        if (e.deltaY < 0) {
+          scale *= scaleAmount;
+          panX = mouseX - (mouseX - panX) * scaleAmount;
+          panY = mouseY - (mouseY - panY) * scaleAmount;
+        } else {
+          scale /= scaleAmount;
+          panX = mouseX - (mouseX - panX) / scaleAmount;
+          panY = mouseY - (mouseY - panY) / scaleAmount;
+        }
+
+        // Limit zoom-out to 1x scale
+        if (scale < 1) {
+          scale = 1;
+          panX = 0;
+          panY = 0;
+        }
+
+        draw();
+      });
+
+      // Load ECG image and draw caliper initially
+      ecgImage.onload = () => {
+        draw();
+      };
+    </script>
+  </body>
+</html>
